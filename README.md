@@ -12,6 +12,12 @@
 
 ---
 
+> **Disclaimer:** This project is **not affiliated with, endorsed by, or officially associated with Salesforce (Quip) or Notion** in any way. Quip and Notion are trademarks of their respective owners. I built this purely for my own use case when I needed to migrate off Quip — figured it might be useful to others in the same boat, so I'm sharing it publicly. Use at your own risk.
+>
+> **Not a developer?** Neither am I. 🙂 I'm not a developer — I built this entire repo using [Claude](https://claude.ai) (Anthropic's AI). If you hit bugs or want to extend it, please feel free — open a PR, fork it, or just take the code and run with it. That's exactly what it's here for.
+
+---
+
 ## Why this exists
 
 Salesforce is retiring Quip. All Quip products will be unrenewable after **March 1, 2027**. Notion has a manual import option, but it only supports one document at a time with no spreadsheet or folder structure preservation. There is no official bulk migration tool.
