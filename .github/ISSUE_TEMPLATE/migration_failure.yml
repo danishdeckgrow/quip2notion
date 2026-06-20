@@ -1,0 +1,63 @@
+name: Migration failure report
+description: Report a document or spreadsheet that failed to migrate
+title: "[Migration Failure] "
+labels: ["bug", "migration"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Before you submit
+        ⚠️ **Please redact all API tokens and document content before submitting.**
+        - Replace your QUIP_TOKEN with `QUIP_TOKEN=***REDACTED***`
+        - Replace your NOTION_TOKEN with `NOTION_TOKEN=***REDACTED***`
+        - Remove any private document text from log output
+
+  - type: input
+    id: version
+    attributes:
+      label: quip2notion version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: document_type
+    attributes:
+      label: Document type
+      options:
+        - Text document
+        - Spreadsheet
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: error_message
+    attributes:
+      label: Error message (redacted)
+      description: Paste the error from the terminal or report.json. Remove all tokens and document content.
+      placeholder: "Quip API error 403 at /threads/..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run quip2notion plan --folder-id ...
+        2. Run quip2notion migrate --execute
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        OS: macOS 14.5
+        Node.js: 20.14.0
+        npm: 10.7.0
+    validations:
+      required: true

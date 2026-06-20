@@ -1,0 +1,57 @@
+{
+  "name": "quip2notion",
+  "version": "0.1.0",
+  "description": "Bulk-migrate your Quip workspace to Notion. Local-first, privacy-safe, resumable.",
+  "keywords": ["quip", "notion", "migration", "cli", "quip-to-notion"],
+  "author": "danishdeckgrow",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/danishdeckgrow/quip2notion.git"
+  },
+  "homepage": "https://github.com/danishdeckgrow/quip2notion#readme",
+  "bugs": {
+    "url": "https://github.com/danishdeckgrow/quip2notion/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "quip2notion": "./dist/cli/index.js"
+  },
+  "files": ["dist", "LICENSE", "README.md", ".env.example"],
+  "engines": { "node": ">=20.0.0" },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli/index.js",
+    "lint": "eslint src tests --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build && npm run test"
+  },
+  "dependencies": {
+    "@notionhq/client": "^2.2.15",
+    "better-sqlite3": "^9.4.3",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "p-limit": "^6.1.0",
+    "pino": "^9.2.0",
+    "pino-pretty": "^11.2.1",
+    "turndown": "^7.2.0",
+    "undici": "^6.19.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.10",
+    "@types/node": "^20.14.9",
+    "@types/turndown": "^5.0.4",
+    "@typescript-eslint/eslint-plugin": "^7.15.0",
+    "@typescript-eslint/parser": "^7.15.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.5.3",
+    "vitest": "^1.6.0"
+  }
+}
