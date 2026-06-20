@@ -181,8 +181,10 @@ export class Migrator {
 
   private async migrateDocument(title: string, html: string, parentPageId: string): Promise<string> {
     const blocks = htmlToBlocks(html)
-    const pageId = await createPage({ parentPageId, title, children: blocks.slice(0, 100) })
-    if (blocks.length > 100) await appendBlocks(pageId, blocks.slice(100))
+    // Create the page empty, then append in size-aware chunks. Tables carry many
+    // nested rows, so seeding children at create time can exceed Notion's limits.
+    const pageId = await createPage({ parentPageId, title })
+    if (blocks.length > 0) await appendBlocks(pageId, blocks)
     return pageId
   }
 

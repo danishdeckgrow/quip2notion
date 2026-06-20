@@ -69,11 +69,40 @@ export async function createPage(params: {
   return response.id
 }
 
+/** Nested children a block carries (table rows, sub-list items). */
+function childUnits(b: BlockObjectRequest): number {
+  const type = (b as { type?: string }).type
+  if (!type) return 0
+  const inner = (b as Record<string, unknown>)[type] as { children?: unknown[] } | undefined
+  return inner && Array.isArray(inner.children) ? inner.children.length : 0
+}
+
+/**
+ * Chunk blocks so each request stays under Notion's limits: max 100 top-level
+ * blocks AND a conservative total-block budget (a table can carry ~90 nested rows,
+ * so counting only top-level blocks could blow past the per-request block cap).
+ */
+function chunkBlocks(blocks: BlockObjectRequest[], maxUnits = 400, maxLen = 90): BlockObjectRequest[][] {
+  const chunks: BlockObjectRequest[][] = []
+  let cur: BlockObjectRequest[] = []
+  let units = 0
+  for (const b of blocks) {
+    const u = 1 + childUnits(b)
+    if (cur.length > 0 && (units + u > maxUnits || cur.length >= maxLen)) {
+      chunks.push(cur)
+      cur = []
+      units = 0
+    }
+    cur.push(b)
+    units += u
+  }
+  if (cur.length) chunks.push(cur)
+  return chunks
+}
+
 export async function appendBlocks(pageId: string, blocks: BlockObjectRequest[]): Promise<void> {
   const notion = getClient()
-  // Notion allows max 100 blocks per append call
-  for (let i = 0; i < blocks.length; i += 100) {
-    const chunk = blocks.slice(i, i + 100)
+  for (const chunk of chunkBlocks(blocks)) {
     await withRetry(
       () => notion.blocks.children.append({ block_id: pageId, children: chunk }),
       'blocks.append'

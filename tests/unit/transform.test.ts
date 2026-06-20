@@ -47,9 +47,42 @@ describe('htmlToBlocks', () => {
     expect(blocks.some((b) => b.type === 'code')).toBe(true)
   })
 
-  it('converts blockquotes to paragraph blocks with prefix', () => {
+  it('converts blockquotes to native quote blocks', () => {
     const blocks = htmlToBlocks('<blockquote>Important note</blockquote>')
-    expect(blocks.some((b) => b.type === 'paragraph')).toBe(true)
+    expect(blocks.some((b) => b.type === 'quote')).toBe(true)
+  })
+
+  it('converts tables to Notion table blocks preserving cells', () => {
+    const html = '<table><thead><tr><th>A</th><th>B</th></tr></thead>' +
+      '<tbody><tr><td>1</td><td>2</td></tr><tr><td>3</td><td>4</td></tr></tbody></table>'
+    const blocks = htmlToBlocks(html) as any[]
+    const table = blocks.find((b) => b.type === 'table')
+    expect(table).toBeTruthy()
+    expect(table.table.table_width).toBe(2)
+    expect(table.table.has_column_header).toBe(true)
+    expect(table.table.children).toHaveLength(3) // header + 2 rows
+    const firstData = table.table.children[1].table_row.cells
+    expect(firstData[0][0].text.content).toBe('1')
+    expect(firstData[1][0].text.content).toBe('2')
+  })
+
+  it('preserves inline formatting (bold, italic, links)', () => {
+    const blocks = htmlToBlocks('<p>plain <b>bold</b> <i>italic</i> <a href="https://x.com">link</a></p>') as any[]
+    const rt = blocks[0].paragraph.rich_text
+    const all = rt.map((r: any) => r.text.content).join('')
+    expect(all).toContain('bold')
+    expect(rt.some((r: any) => r.annotations?.bold)).toBe(true)
+    expect(rt.some((r: any) => r.annotations?.italic)).toBe(true)
+    expect(rt.some((r: any) => r.text.link?.url === 'https://x.com')).toBe(true)
+  })
+
+  it('normalizes ragged table rows to a fixed width', () => {
+    const html = '<table><tr><td>a</td><td>b</td><td>c</td></tr><tr><td>x</td></tr></table>'
+    const table = (htmlToBlocks(html) as any[]).find((b) => b.type === 'table')
+    expect(table.table.table_width).toBe(3)
+    for (const row of table.table.children) {
+      expect(row.table_row.cells).toHaveLength(3)
+    }
   })
 
   it('handles complex mixed content', () => {
