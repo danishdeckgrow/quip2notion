@@ -1,5 +1,6 @@
 import { Command } from 'commander'
 import { Migrator } from '../../migrator.js'
+import type { CommentMode } from '../../migrator.js'
 import { getConfig } from '../../config.js'
 import { logger } from '../../logger.js'
 
@@ -9,6 +10,7 @@ export function migrateCommand(): Command {
     .option('--dry-run', 'Simulate migration without writing to Notion (default)')
     .option('--execute', 'Perform the actual migration (writes to Notion)')
     .option('--concurrency <n>', 'Concurrent API requests (1-10)', '4')
+    .option('--comments <mode>', 'Comment import: in-page | native | both | none', 'both')
     .option('--config <path>', 'Path to .env config file', '.env')
     .option('--verbose', 'Verbose output')
     .action(async (opts) => {
@@ -17,6 +19,8 @@ export function migrateCommand(): Command {
       const dryRun = !opts.execute
       const concurrency = Math.min(10, Math.max(1, parseInt(opts.concurrency, 10) || 4))
       const targetPageId = config.NOTION_TARGET_PAGE_ID
+      const validModes: CommentMode[] = ['in-page', 'native', 'both', 'none']
+      const comments: CommentMode = validModes.includes(opts.comments) ? opts.comments : 'both'
 
       if (!targetPageId && !dryRun) {
         logger.error('NOTION_TARGET_PAGE_ID is required for --execute. Set it in .env.')
@@ -34,6 +38,7 @@ export function migrateCommand(): Command {
         dryRun,
         concurrency,
         targetPageId: targetPageId ?? 'dry-run-target',
+        comments,
       })
 
       await migrator.run()

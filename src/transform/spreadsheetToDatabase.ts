@@ -25,20 +25,31 @@ export function parseSpreadsheetHtml(html: string): SpreadsheetData {
   return { headers: headers.length > 0 ? headers : ['Column 1'], rows }
 }
 
+/**
+ * Build unique, non-empty column keys. Notion databases require every property
+ * name to be distinct AND exactly one property of type `title`; duplicate or
+ * empty headers (common in Quip exports) would otherwise overwrite the title.
+ */
+export function uniqueColumnKeys(headers: string[]): string[] {
+  const src = headers.length > 0 ? headers : ['Name']
+  const seen = new Map<string, number>()
+  return src.map((h, idx) => {
+    let key = (h && h.trim()) || `Column ${idx + 1}`
+    if (key.length > 200) key = key.slice(0, 200)
+    const count = seen.get(key) ?? 0
+    seen.set(key, count + 1)
+    return count === 0 ? key : `${key} (${count + 1})`
+  })
+}
+
 export function buildDatabaseProperties(
   headers: string[]
 ): CreateDatabaseParameters['properties'] {
+  const keys = uniqueColumnKeys(headers)
   const props: CreateDatabaseParameters['properties'] = {}
-
-  headers.forEach((header, idx) => {
-    const key = header || `Column ${idx + 1}`
-    if (idx === 0) {
-      props[key] = { title: {} }
-    } else {
-      props[key] = { rich_text: {} }
-    }
+  keys.forEach((key, idx) => {
+    props[key] = idx === 0 ? { title: {} } : { rich_text: {} }
   })
-
   return props
 }
 
@@ -46,18 +57,14 @@ export function buildRowProperties(
   headers: string[],
   cells: string[]
 ): Record<string, unknown> {
+  const keys = uniqueColumnKeys(headers)
   const props: Record<string, unknown> = {}
-
-  headers.forEach((header, idx) => {
-    const key = header || `Column ${idx + 1}`
+  keys.forEach((key, idx) => {
     const value = cells[idx] ?? ''
-
-    if (idx === 0) {
-      props[key] = { title: [{ text: { content: value.slice(0, 2000) } }] }
-    } else {
-      props[key] = { rich_text: [{ text: { content: value.slice(0, 2000) } }] }
-    }
+    props[key] =
+      idx === 0
+        ? { title: [{ text: { content: value.slice(0, 2000) } }] }
+        : { rich_text: [{ text: { content: value.slice(0, 2000) } }] }
   })
-
   return props
 }
