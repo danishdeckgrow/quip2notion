@@ -85,6 +85,38 @@ describe('htmlToBlocks', () => {
     }
   })
 
+  it('nests sub-lists under their parent list item', () => {
+    const blocks = htmlToBlocks('<ul><li>parent<ul><li>child</li></ul></li></ul>') as any[]
+    const item = blocks.find((b) => b.type === 'bulleted_list_item')
+    expect(item).toBeTruthy()
+    expect(item.bulleted_list_item.children?.[0]?.type).toBe('bulleted_list_item')
+  })
+
+  it('converts checkbox list items to to_do blocks', () => {
+    const checked = htmlToBlocks('<ul><li><input type="checkbox" checked/>done</li></ul>') as any[]
+    const todo = checked.find((b) => b.type === 'to_do')
+    expect(todo).toBeTruthy()
+    expect(todo.to_do.checked).toBe(true)
+    const open = htmlToBlocks('<ul><li><input type="checkbox"/>todo</li></ul>') as any[]
+    expect(open.find((b) => b.type === 'to_do')?.to_do.checked).toBe(false)
+  })
+
+  it('emits a placeholder for images and a divider for hr', () => {
+    expect(htmlToBlocks('<p><img src="/blob/x/y"/>caption</p>').some((b) => b.type === 'paragraph')).toBe(true)
+    expect(htmlToBlocks('<hr/>').some((b) => b.type === 'divider')).toBe(true)
+  })
+
+  it('maps h4-h6 down to heading_3', () => {
+    expect(htmlToBlocks('<h4>x</h4>').some((b) => b.type === 'heading_3')).toBe(true)
+    expect(htmlToBlocks('<h6>y</h6>').some((b) => b.type === 'heading_3')).toBe(true)
+  })
+
+  it('recurses into container divs/sections', () => {
+    const blocks = htmlToBlocks('<div data-section-style="1"><p>inside</p></div><section><h2>Sec</h2></section>')
+    expect(blocks.some((b) => b.type === 'paragraph')).toBe(true)
+    expect(blocks.some((b) => b.type === 'heading_2')).toBe(true)
+  })
+
   it('handles complex mixed content', () => {
     const html = '<h1>Title</h1><p>Intro</p><ul><li>A</li><li>B</li></ul>'
     const blocks = htmlToBlocks(html)
