@@ -47,9 +47,88 @@ describe('htmlToBlocks', () => {
     expect(blocks.some((b) => b.type === 'code')).toBe(true)
   })
 
-  it('converts blockquotes to paragraph blocks with prefix', () => {
+  it('converts blockquotes to native quote blocks', () => {
     const blocks = htmlToBlocks('<blockquote>Important note</blockquote>')
+    expect(blocks.some((b) => b.type === 'quote')).toBe(true)
+  })
+
+  it('converts tables to Notion table blocks preserving cells', () => {
+    const html = '<table><thead><tr><th>A</th><th>B</th></tr></thead>' +
+      '<tbody><tr><td>1</td><td>2</td></tr><tr><td>3</td><td>4</td></tr></tbody></table>'
+    const blocks = htmlToBlocks(html) as any[]
+    const table = blocks.find((b) => b.type === 'table')
+    expect(table).toBeTruthy()
+    expect(table.table.table_width).toBe(2)
+    expect(table.table.has_column_header).toBe(true)
+    expect(table.table.children).toHaveLength(3) // header + 2 rows
+    const firstData = table.table.children[1].table_row.cells
+    expect(firstData[0][0].text.content).toBe('1')
+    expect(firstData[1][0].text.content).toBe('2')
+  })
+
+  it('preserves inline formatting (bold, italic, links)', () => {
+    const blocks = htmlToBlocks('<p>plain <b>bold</b> <i>italic</i> <a href="https://x.com">link</a></p>') as any[]
+    const rt = blocks[0].paragraph.rich_text
+    const all = rt.map((r: any) => r.text.content).join('')
+    expect(all).toContain('bold')
+    expect(rt.some((r: any) => r.annotations?.bold)).toBe(true)
+    expect(rt.some((r: any) => r.annotations?.italic)).toBe(true)
+    expect(rt.some((r: any) => r.text.link?.url === 'https://x.com')).toBe(true)
+  })
+
+  it('normalizes ragged table rows to a fixed width', () => {
+    const html = '<table><tr><td>a</td><td>b</td><td>c</td></tr><tr><td>x</td></tr></table>'
+    const table = (htmlToBlocks(html) as any[]).find((b) => b.type === 'table')
+    expect(table.table.table_width).toBe(3)
+    for (const row of table.table.children) {
+      expect(row.table_row.cells).toHaveLength(3)
+    }
+  })
+
+  it('nests sub-lists under their parent list item', () => {
+    const blocks = htmlToBlocks('<ul><li>parent<ul><li>child</li></ul></li></ul>') as any[]
+    const item = blocks.find((b) => b.type === 'bulleted_list_item')
+    expect(item).toBeTruthy()
+    expect(item.bulleted_list_item.children?.[0]?.type).toBe('bulleted_list_item')
+  })
+
+  it('converts checkbox list items to to_do blocks', () => {
+    const checked = htmlToBlocks('<ul><li><input type="checkbox" checked/>done</li></ul>') as any[]
+    const todo = checked.find((b) => b.type === 'to_do')
+    expect(todo).toBeTruthy()
+    expect(todo.to_do.checked).toBe(true)
+    const open = htmlToBlocks('<ul><li><input type="checkbox"/>todo</li></ul>') as any[]
+    expect(open.find((b) => b.type === 'to_do')?.to_do.checked).toBe(false)
+  })
+
+  it('emits a placeholder for images and a divider for hr', () => {
+    expect(htmlToBlocks('<p><img src="/blob/x/y"/>caption</p>').some((b) => b.type === 'paragraph')).toBe(true)
+    expect(htmlToBlocks('<hr/>').some((b) => b.type === 'divider')).toBe(true)
+  })
+
+  it('maps h4-h6 down to heading_3', () => {
+    expect(htmlToBlocks('<h4>x</h4>').some((b) => b.type === 'heading_3')).toBe(true)
+    expect(htmlToBlocks('<h6>y</h6>').some((b) => b.type === 'heading_3')).toBe(true)
+  })
+
+  it('recurses into container divs/sections', () => {
+    const blocks = htmlToBlocks('<div data-section-style="1"><p>inside</p></div><section><h2>Sec</h2></section>')
     expect(blocks.some((b) => b.type === 'paragraph')).toBe(true)
+    expect(blocks.some((b) => b.type === 'heading_2')).toBe(true)
+  })
+
+  it('maps cell background colors to Notion highlight colors', () => {
+    const html =
+      '<table><tr><td style="background-color:#FEFCCB">y</td>' +
+      '<td style="background-color:#f0f0f0">g</td>' +
+      '<td style="background-color:#FEFCCB"></td></tr></table>'
+    const table = (htmlToBlocks(html) as any[]).find((b) => b.type === 'table')
+    const cells = table.table.children[0].table_row.cells
+    expect(cells[0][0].annotations.color).toBe('yellow_background')
+    expect(cells[1][0].annotations.color).toBe('gray_background')
+    // empty coloured cell is filled with a colour-annotated space
+    expect(cells[2][0].text.content).toBe(' ')
+    expect(cells[2][0].annotations.color).toBe('yellow_background')
   })
 
   it('handles complex mixed content', () => {

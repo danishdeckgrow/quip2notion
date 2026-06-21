@@ -1,5 +1,6 @@
 import { Command } from 'commander'
 import { Migrator } from '../../migrator.js'
+import type { CommentMode } from '../../migrator.js'
 import { getConfig } from '../../config.js'
 import { getAllMigrations, upsertMigration } from '../../state/index.js'
 import { logger } from '../../logger.js'
@@ -8,6 +9,7 @@ export function resumeCommand(): Command {
   return new Command('resume')
     .description('Resume an interrupted migration from where it left off')
     .option('--concurrency <n>', 'Concurrent API requests (1-10)', '4')
+    .option('--comments <mode>', 'Comment import: in-page | native | both | none', 'both')
     .action(async (opts) => {
       const config = getConfig()
       const targetPageId = config.NOTION_TARGET_PAGE_ID
@@ -27,8 +29,10 @@ export function resumeCommand(): Command {
       }
 
       const concurrency = Math.min(10, Math.max(1, parseInt(opts.concurrency, 10) || 4))
+      const validModes: CommentMode[] = ['in-page', 'native', 'both', 'none']
+      const comments: CommentMode = validModes.includes(opts.comments) ? opts.comments : 'both'
 
-      const migrator = new Migrator({ dryRun: false, concurrency, targetPageId })
+      const migrator = new Migrator({ dryRun: false, concurrency, targetPageId, comments })
       await migrator.run()
     })
 }

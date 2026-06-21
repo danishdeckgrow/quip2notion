@@ -21,6 +21,7 @@ vi.mock('../../src/quip/client.js', () => ({
       },
       html: '<h1>Hello World</h1><p>Some content.</p>',
     }),
+    getMessages: vi.fn().mockResolvedValue([]),
   })),
 }))
 
@@ -29,7 +30,7 @@ vi.mock('../../src/notion/client.js', () => ({
   appendBlocks: vi.fn().mockResolvedValue(undefined),
   createDatabase: vi.fn().mockResolvedValue('notion-db-123'),
   createDatabaseRow: vi.fn().mockResolvedValue('notion-row-123'),
-  addComment: vi.fn().mockResolvedValue(undefined),
+  addComment: vi.fn().mockResolvedValue(true),
   resetClient: vi.fn(),
 }))
 
@@ -45,11 +46,19 @@ vi.mock('../../src/config.js', () => ({
 }))
 
 let tmpDb: string
+const planPath = path.join(process.cwd(), 'plan.json')
+
+const PLAN = {
+  roots: ['folder1'],
+  folders: [{ id: 'folder1', title: 'Test Folder', parent: null }],
+  docs: [{ id: 'thread1', title: 'Test Document', type: 'document', parent: 'folder1' }],
+}
 
 beforeEach(async () => {
   tmpDb = path.join(os.tmpdir(), `migrator-test-${Date.now()}-${Math.random()}.db`)
   const { getDb, upsertMigration } = await import('../../src/state/index.js')
   getDb(tmpDb)
+  fs.writeFileSync(planPath, JSON.stringify(PLAN))
 
   upsertMigration({
     quipId: 'thread1',
@@ -70,24 +79,45 @@ afterEach(async () => {
     const p = tmpDb + suffix
     if (fs.existsSync(p)) fs.unlinkSync(p)
   }
+  for (const f of ['plan.json', 'report.json', 'report.html']) {
+    const p = path.join(process.cwd(), f)
+    if (fs.existsSync(p)) fs.unlinkSync(p)
+  }
+  vi.clearAllMocks()
 })
 
 describe('Migrator dry-run', () => {
-  it('marks pending records as success without calling Notion', async () => {
+  it('previews the tree without writing to Notion or mutating state', async () => {
     const { Migrator } = await import('../../src/migrator.js')
-    const migrator = new Migrator({ dryRun: true, concurrency: 1, targetPageId: 'target' })
+    const notion = await import('../../src/notion/client.js')
+
+    const migrator = new Migrator({ dryRun: true, concurrency: 1, targetPageId: 'target', comments: 'none' })
     await migrator.run()
+
+    expect(vi.mocked(notion.createPage)).not.toHaveBeenCalled()
 
     const { getAllMigrations } = await import('../../src/state/index.js')
     const records = getAllMigrations()
-    expect(records.every((r) => r.status === 'success')).toBe(true)
-    expect(records[0].notionPageId).toBe('dry-run')
+    // Dry-run must not mark anything as migrated.
+    expect(records.every((r) => r.status === 'pending')).toBe(true)
   })
+})
 
-  it('generates report files after dry-run', async () => {
+describe('Migrator execute', () => {
+  it('creates folder + document pages and writes report files', async () => {
     const { Migrator } = await import('../../src/migrator.js')
-    const migrator = new Migrator({ dryRun: true, concurrency: 1, targetPageId: 'target' })
+    const notion = await import('../../src/notion/client.js')
+
+    const migrator = new Migrator({ dryRun: false, concurrency: 1, targetPageId: 'target', comments: 'none' })
     await migrator.run()
+
+    // One call for the folder page, one for the document page.
+    expect(vi.mocked(notion.createPage).mock.calls.length).toBeGreaterThanOrEqual(2)
+
+    const { getAllMigrations } = await import('../../src/state/index.js')
+    const records = getAllMigrations()
+    expect(records[0].status).toBe('success')
+    expect(records[0].notionPageId).toBe('notion-page-123')
 
     expect(fs.existsSync(path.join(process.cwd(), 'report.json'))).toBe(true)
     expect(fs.existsSync(path.join(process.cwd(), 'report.html'))).toBe(true)

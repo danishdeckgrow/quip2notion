@@ -17,12 +17,10 @@ export interface MigrationRecord {
 }
 
 let _db: Database.Database | null = null
-let _dbPath: string | null = null
 
 export function getDb(dbPath?: string): Database.Database {
   if (_db) return _db
   const file = dbPath ?? path.join(process.cwd(), 'migration-state.db')
-  _dbPath = file
   _db = new Database(file)
   _db.pragma('journal_mode = WAL')
   _db.pragma('foreign_keys = ON')
@@ -35,7 +33,6 @@ export function closeDb(): void {
   if (_db) {
     _db.close()
     _db = null
-    _dbPath = null
   }
 }
 
