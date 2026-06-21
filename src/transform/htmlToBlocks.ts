@@ -20,6 +20,7 @@ interface Anno {
   underline?: boolean
   strikethrough?: boolean
   code?: boolean
+  color?: string
 }
 interface RT {
   type: 'text'
@@ -57,6 +58,68 @@ function pushText(out: RT[], content: string, anno: Anno, link?: string): void {
   }
 }
 
+function cssToRgb(v: string): [number, number, number] | null {
+  const hex = v.match(/#([0-9a-f]{6})\b/i) || v.match(/#([0-9a-f]{3})\b/i)
+  if (hex) {
+    let h = hex[1]
+    if (h.length === 3) h = h.split('').map((c) => c + c).join('')
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
+  }
+  const m = v.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i)
+  if (m) return [Math.round(+m[1]), Math.round(+m[2]), Math.round(+m[3])]
+  return null
+}
+
+/** Map an arbitrary RGB to the nearest Notion palette colour (or null for white/near-white). */
+function rgbToNotionColor(r: number, g: number, b: number): string | null {
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  if (max >= 248 && min >= 248) return null // white-ish — leave default
+  const sat = max === 0 ? 0 : (max - min) / max
+  if (sat < 0.12) return 'gray'
+  const rn = r / 255
+  const gn = g / 255
+  const bn = b / 255
+  const mx = Math.max(rn, gn, bn)
+  const d = mx - Math.min(rn, gn, bn)
+  let h = 0
+  if (d !== 0) {
+    if (mx === rn) h = ((gn - bn) / d) % 6
+    else if (mx === gn) h = (bn - rn) / d + 2
+    else h = (rn - gn) / d + 4
+    h *= 60
+    if (h < 0) h += 360
+  }
+  if (h < 15 || h >= 345) return 'red'
+  if (h < 45) return 'orange'
+  if (h < 70) return 'yellow'
+  if (h < 170) return 'green'
+  if (h < 260) return 'blue'
+  if (h < 300) return 'purple'
+  return 'pink'
+}
+
+/** Derive a Notion colour from a CSS style string; background colour wins over text colour. */
+function colorFromStyle(style: string): string | undefined {
+  const bg = style.match(/background(?:-color)?\s*:\s*([^;]+)/i)
+  const fg = style.match(/(?:^|;)\s*color\s*:\s*([^;]+)/i)
+  const raw = (bg && bg[1]) || (fg && fg[1])
+  if (!raw) return undefined
+  const rgb = cssToRgb(raw.trim())
+  if (!rgb) return undefined
+  const name = rgbToNotionColor(rgb[0], rgb[1], rgb[2])
+  if (!name) return undefined
+  return bg ? `${name}_background` : name
+}
+
+/** Colour annotation derived from an element's own style attribute (e.g. a table cell fill). */
+function colorAnnoFromEl(el: any): Anno {
+  const style = el && el.getAttribute && el.getAttribute('style')
+  if (!style) return {}
+  const color = colorFromStyle(style)
+  return color ? { color } : {}
+}
+
 function applyInlineStyle(el: any, a: Anno): void {
   const style = (el.getAttribute('style') || '').toLowerCase()
   const cls = (el.getAttribute('class') || '').toLowerCase()
@@ -65,6 +128,8 @@ function applyInlineStyle(el: any, a: Anno): void {
   if (/text-decoration[^;]*underline/.test(style)) a.underline = true
   if (/text-decoration[^;]*line-through/.test(style)) a.strikethrough = true
   if (/font-family:[^;]*(mono|courier|consol)/.test(style) || /\b(code|monospace)\b/.test(cls)) a.code = true
+  const styleColor = colorFromStyle(style)
+  if (styleColor) a.color = styleColor
 }
 
 function richInto(node: any, anno: Anno, link: string | undefined, out: RT[]): void {
@@ -94,14 +159,14 @@ function richInto(node: any, anno: Anno, link: string | undefined, out: RT[]): v
   for (const c of kids(node)) richInto(c, a, l, out)
 }
 
-function richFromNodes(nodes: any[]): RT[] {
+function richFromNodes(nodes: any[], base: Anno = {}): RT[] {
   const out: RT[] = []
-  for (const n of nodes) richInto(n, {}, undefined, out)
+  for (const n of nodes) richInto(n, { ...base }, undefined, out)
   return out
 }
 
-function richChildren(el: any): RT[] {
-  return richFromNodes(kids(el))
+function richChildren(el: any, base: Anno = {}): RT[] {
+  return richFromNodes(kids(el), base)
 }
 
 /** Trim edge whitespace, drop empty segments, clamp to Notion's per-block cap. */
@@ -174,7 +239,15 @@ function emitTable(tableEl: any, out: BlockObjectRequest[]): void {
   const rows: RT[][][] = trs.map((tr) =>
     kids(tr)
       .filter((n) => n.nodeType === 1 && ['td', 'th'].includes((n.tagName || '').toLowerCase()))
-      .map((cell) => trimRich(richChildren(cell)))
+      .map((cell) => {
+        const base = colorAnnoFromEl(cell) // cell fill colour, applied to all cell text
+        const rt = trimRich(richFromNodes(kids(cell), base))
+        // Preserve an empty coloured cell's fill with a colour-annotated space.
+        if (rt.length === 0 && base.color) {
+          return [{ type: 'text', text: { content: ' ' }, annotations: { ...base } } as RT]
+        }
+        return rt
+      })
   )
   let width = Math.max(1, ...rows.map((r) => r.length))
   width = Math.min(width, 100)
@@ -216,17 +289,17 @@ function emitBlock(el: any, tag: string, out: BlockObjectRequest[]): void {
     case 'h4':
     case 'h5':
     case 'h6': {
-      const rt = trimRich(richChildren(el))
+      const rt = trimRich(richChildren(el, colorAnnoFromEl(el)))
       if (rt.length) out.push(heading(Number(tag[1]), rt))
       break
     }
     case 'p': {
-      const rt = trimRich(richChildren(el))
+      const rt = trimRich(richChildren(el, colorAnnoFromEl(el)))
       if (rt.length) out.push(paragraph(rt))
       break
     }
     case 'blockquote': {
-      const rt = trimRich(richChildren(el))
+      const rt = trimRich(richChildren(el, colorAnnoFromEl(el)))
       if (rt.length) out.push({ type: 'quote', quote: { rich_text: rt } } as unknown as BlockObjectRequest)
       break
     }

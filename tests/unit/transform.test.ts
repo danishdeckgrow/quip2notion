@@ -117,6 +117,20 @@ describe('htmlToBlocks', () => {
     expect(blocks.some((b) => b.type === 'heading_2')).toBe(true)
   })
 
+  it('maps cell background colors to Notion highlight colors', () => {
+    const html =
+      '<table><tr><td style="background-color:#FEFCCB">y</td>' +
+      '<td style="background-color:#f0f0f0">g</td>' +
+      '<td style="background-color:#FEFCCB"></td></tr></table>'
+    const table = (htmlToBlocks(html) as any[]).find((b) => b.type === 'table')
+    const cells = table.table.children[0].table_row.cells
+    expect(cells[0][0].annotations.color).toBe('yellow_background')
+    expect(cells[1][0].annotations.color).toBe('gray_background')
+    // empty coloured cell is filled with a colour-annotated space
+    expect(cells[2][0].text.content).toBe(' ')
+    expect(cells[2][0].annotations.color).toBe('yellow_background')
+  })
+
   it('handles complex mixed content', () => {
     const html = '<h1>Title</h1><p>Intro</p><ul><li>A</li><li>B</li></ul>'
     const blocks = htmlToBlocks(html)
