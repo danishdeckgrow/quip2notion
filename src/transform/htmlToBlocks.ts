@@ -70,7 +70,7 @@ function applyInlineStyle(el: any, a: Anno): void {
 function richInto(node: any, anno: Anno, link: string | undefined, out: RT[]): void {
   if (node.nodeType === 3) {
     // Strip Quip's zero-width-space placeholders, then collapse whitespace.
-    pushText(out, (node.nodeValue || '').replace(/​/g, '').replace(/\s+/g, ' '), anno, link)
+    pushText(out, (node.nodeValue || '').replace(/\u200B/g, '').replace(/\s+/g, ' '), anno, link)
     return
   }
   if (node.nodeType !== 1) return

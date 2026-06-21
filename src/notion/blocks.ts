@@ -110,21 +110,15 @@ export function commentItemBlock(
   children?: BlockObjectRequest[]
 ): BlockObjectRequest {
   const meta = dateStr ? `${author || 'Unknown'} · ${dateStr}: ` : `${author || 'Unknown'}: `
-  const block: BlockObjectRequest = {
-    type: 'bulleted_list_item',
-    bulleted_list_item: {
-      rich_text: [
-        { type: 'text', text: { content: truncate(meta, 200) }, annotations: { bold: true } },
-        { type: 'text', text: { content: truncate(text, 1800) } },
-      ],
-    },
+  const inner: Record<string, unknown> = {
+    rich_text: [
+      { type: 'text', text: { content: truncate(meta, 200) }, annotations: { bold: true } },
+      { type: 'text', text: { content: truncate(text, 1800) } },
+    ],
   }
-  if (children && children.length > 0) {
-    // Notion accepts nested children on list items (one level used here for replies).
-    ;(block as { bulleted_list_item: { children?: BlockObjectRequest[] } }).bulleted_list_item.children =
-      children.slice(0, 100)
-  }
-  return block
+  // Notion accepts nested children on list items (one level used here for replies).
+  if (children && children.length > 0) inner.children = children.slice(0, 100)
+  return { type: 'bulleted_list_item', bulleted_list_item: inner } as unknown as BlockObjectRequest
 }
 
 function truncate(s: string, max: number): string {
